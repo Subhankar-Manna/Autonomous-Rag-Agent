@@ -1,10 +1,13 @@
 from app.graph.state import AgentState
-import requests
 import re
+import os
+from langchain_groq import ChatGroq
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "qwen2.5:1.5b"
 
+llm = ChatGroq(
+    model="llama-3.1-8b-instant",
+    api_key=os.getenv("GROQ_API_KEY")
+)
 
 def planner_agent(state: AgentState) -> AgentState:
     """
@@ -29,27 +32,19 @@ User query:
 Return a numbered step-by-step execution plan only.
 """
 
-    response = requests.post(
-        OLLAMA_URL,
-        json={
-            "model": MODEL_NAME,
-            "prompt": prompt,
-            "stream": False
-        },
-        timeout=60
-    )
+    try:
+        response = llm.invoke(prompt)
+        plan_text = response.content
+    except Exception:
+        
+        plan_text = "1. Understand the query\n2. Generate response\n3. Return answer"
 
-    response.raise_for_status()
-
-    plan_text = response.json().get("response", "")
-
-    # ✅ Convert plan text into clean list
+    # Convert to list
     plan_steps = []
     for line in plan_text.split("\n"):
         line = line.strip()
-        if re.match(r"^\d+\.\s+[A-Z]", line):
-           plan_steps.append(line)
+        if re.match(r"^\d+\.\s+", line):
+            plan_steps.append(line)
 
     state.plan = plan_steps
     return state
-

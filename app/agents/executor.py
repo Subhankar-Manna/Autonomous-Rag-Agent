@@ -17,82 +17,58 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_PATH = BASE_DIR / "data" / "IJNRD2506195.pdf"
 VECTOR_DB_PATH = BASE_DIR / "faiss_index"
 
-# LLM
+
 llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
+    model="llama-3.1-8b-instant",
     api_key=os.getenv("GROQ_API_KEY")
 )
+
+# Load embeddings ONCE
+embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+)
+
+
+if VECTOR_DB_PATH.exists():
+    vectorstore = FAISS.load_local(
+        str(VECTOR_DB_PATH),
+        embeddings,
+        allow_dangerous_deserialization=True
+    )
+else:
+    loader = PyPDFLoader(str(DATA_PATH))
+    documents = loader.load()
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=500,
+        chunk_overlap=50
+    )
+    chunks = splitter.split_documents(documents)
+
+    vectorstore = FAISS.from_documents(chunks, embeddings)
+    vectorstore.save_local(str(VECTOR_DB_PATH))
 
 
 def executor_agent(state: AgentState) -> AgentState:
     print("EXECUTOR CALLED")
 
     try:
-        test = llm.invoke("What is machine learning?")
-        print("TEST LLM:", test.content)
-
-        # Load PDF
-        if not DATA_PATH.exists():
-            state.result = f"PDF not found at {DATA_PATH}"
-            return state
-
-        loader = PyPDFLoader(str(DATA_PATH))
-        documents = loader.load()
-
-        if not documents:
-            state.result = "No documents found"
-            return state
-
-        # Split text
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=50
-        )
-        chunks = splitter.split_documents(documents)
-
-        # Embeddings
-        embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
-
-        # Vector store
-        if VECTOR_DB_PATH.exists():
-            vectorstore = FAISS.load_local(
-                str(VECTOR_DB_PATH),
-                embeddings,
-                allow_dangerous_deserialization=True
-            )
-        else:
-            vectorstore = FAISS.from_documents(chunks, embeddings)
-            vectorstore.save_local(str(VECTOR_DB_PATH))
-
-        # Retriever
-        retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-        retrieved_docs = retriever.invoke(state.user_query)
-
-
         query = state.user_query
 
+        retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+        retrieved_docs = retriever.invoke(query)
+
         # No docs → LLM
-        if not retrieved_docs or len(retrieved_docs) == 0:
-            print("No docs → LLM")
-
-            prompt = f"""
-Explain clearly:
-
-{query}
-"""
-            response = llm.invoke(prompt)
+        if not retrieved_docs:
+            response = llm.invoke(f"Explain clearly:\n{query}")
             state.result = response.content
             return state
 
         # Build context
         context = "\n\n".join([doc.page_content for doc in retrieved_docs])
 
-        # Check relevance using LLM
+        #  Relevance check
         relevance_prompt = f"""
-You are an AI system.
-
 Check if the context is relevant to the question.
 
 Question:
@@ -104,30 +80,20 @@ Context:
 Answer only YES or NO.
 """
         relevance = llm.invoke(relevance_prompt).content.strip().lower()
-        print("RELEVANCE:", relevance)
 
-        # If NOT relevant → LLM
+        
         if "no" in relevance:
-            print("Not relevant → LLM")
-
-            prompt = f"""
-Explain clearly:
-
-{query}
-"""
-            response = llm.invoke(prompt)
+            response = llm.invoke(f"Explain clearly:\n{query}")
             state.result = response.content
             return state
 
-        # RAG MODE
-        prompt = f"""
+       
+        rag_prompt = f"""
 Answer using ONLY the context below.
 
-Rules:
-- Be clear
-- Do NOT copy text
-- Explain in simple words
-- If not found, say "I don't know"
+- Be simple
+- Do not copy text
+- If not found say "I don't know"
 
 Question:
 {query}
@@ -137,20 +103,12 @@ Context:
 
 Answer:
 """
-        response = llm.invoke(prompt)
-        print("RAG RESPONSE:", response.content)
+        response = llm.invoke(rag_prompt)
 
-        # Safety fallback
+       
         if "i don't know" in response.content.lower():
-            print("Weak context → fallback LLM")
-
-            fallback_prompt = f"""
-Explain clearly:
-
-{query}
-"""
-            fallback_response = llm.invoke(fallback_prompt)
-            state.result = fallback_response.content
+            fallback = llm.invoke(f"Explain clearly:\n{query}")
+            state.result = fallback.content
         else:
             state.result = response.content
 
