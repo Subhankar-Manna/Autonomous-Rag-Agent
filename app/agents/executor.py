@@ -8,7 +8,7 @@ from app.graph.state import AgentState
 
 # Paths
 BASE_DIR = Path(__file__).resolve().parents[2]
-VECTOR_DB_PATH = BASE_DIR / "faiss_index"
+VECTOR_DB_PATH = BASE_DIR / "rag_db"
 
 # LLM
 llm = ChatGroq(
@@ -21,14 +21,18 @@ embeddings = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
 )
 
-# Load vectorstore
-vectorstore = FAISS.load_local(
-    str(VECTOR_DB_PATH),
-    embeddings,
-    allow_dangerous_deserialization=True
-)
-
-retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+if VECTOR_DB_PATH.exists():
+    print("FAISS LOADING...")
+    vectorstore = FAISS.load_local(
+        str(VECTOR_DB_PATH),
+        embeddings,
+        allow_dangerous_deserialization=True
+    )
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+    print("FAISS READY")
+else:
+    print("FAISS NOT FOUND")
+    retriever = None
 
 
 def executor_agent(state: AgentState) -> AgentState:
@@ -37,7 +41,11 @@ def executor_agent(state: AgentState) -> AgentState:
     try:
         query = state.user_query
 
-        docs = retriever.invoke(query)
+       
+        if retriever:
+            docs = retriever.invoke(query)
+        else:
+            docs = []
 
         context = "\n\n".join([doc.page_content for doc in docs])
 
