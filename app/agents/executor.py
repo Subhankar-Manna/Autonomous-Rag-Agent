@@ -12,12 +12,14 @@ from app.graph.state import AgentState
 
 load_dotenv()
 
+# Paths
 BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_PATH = BASE_DIR / "data" / "IJNRD2506195.pdf"
 VECTOR_DB_PATH = BASE_DIR / "faiss_index"
 
+
 llm = ChatGroq(
-    model="llama-3.1-8b-instant",
+    model="llama-3.3-70b-versatile",
     api_key=os.getenv("GROQ_API_KEY")
 )
 
@@ -28,20 +30,23 @@ def executor_agent(state: AgentState) -> AgentState:
     try:
         query = state.user_query
 
-        # CHECK PDF FIRST 
+       
         if not DATA_PATH.exists():
-            print(f"PDF NOT FOUND → {DATA_PATH}")
+            print(" PDF NOT FOUND → LLM MODE")
 
             response = llm.invoke(f"Explain clearly:\n{query}")
             state.result = response.content
             return state
 
-       
+   
+        print(" PDF FOUND → RAG MODE")
+
         loader = PyPDFLoader(str(DATA_PATH))
         documents = loader.load()
 
         if not documents:
-            response = llm.invoke(f"Explain clearly:\n{query}")
+            print(" Empty PDF → LLM fallback")
+            response = llm.invoke(query)
             state.result = response.content
             return state
 
@@ -52,11 +57,12 @@ def executor_agent(state: AgentState) -> AgentState:
         )
         chunks = splitter.split_documents(documents)
 
+        # Embeddings
         embeddings = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2"
         )
 
-        # Vector DB
+        # Vector store
         if VECTOR_DB_PATH.exists():
             vectorstore = FAISS.load_local(
                 str(VECTOR_DB_PATH),
@@ -70,29 +76,39 @@ def executor_agent(state: AgentState) -> AgentState:
         retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
         retrieved_docs = retriever.invoke(query)
 
+   
         if not retrieved_docs:
-            response = llm.invoke(f"Explain clearly:\n{query}")
+            print(" No docs → LLM")
+            response = llm.invoke(query)
             state.result = response.content
             return state
 
+        # Build context
         context = "\n\n".join([doc.page_content for doc in retrieved_docs])
 
-        rag_prompt = f"""
+       
+        prompt = f"""
 Answer using ONLY the context below.
+
+Rules:
+- Simple explanation
+- Do not copy text
+- If not found say "I don't know"
 
 Question:
 {query}
 
 Context:
 {context}
-"""
-        response = llm.invoke(rag_prompt)
 
+Answer:
+"""
+        response = llm.invoke(prompt)
         state.result = response.content
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        state.result = f"Executor failed: {str(e)}"
+        state.result = f"Executor Error: {str(e)}"
 
     return state
