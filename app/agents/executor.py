@@ -47,7 +47,7 @@ def executor_agent(state: AgentState) -> AgentState:
         else:
             docs = []
 
-        context = "\n\n".join([doc.page_content for doc in docs])
+        context = "\n\n".join([doc.page_content[:300] for doc in docs])
 
         prompt = f"""
 Answer based on context:
@@ -59,7 +59,7 @@ Context:
 {context}
 """
 
-        response = llm.invoke(prompt)
+        response = llm.invoke(prompt[:2000])
         state.result = response.content
 
     except Exception as e:
