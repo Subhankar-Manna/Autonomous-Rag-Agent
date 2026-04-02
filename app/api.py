@@ -18,7 +18,7 @@ async def chat(request: QueryRequest):
     try:
         start_time = time.time()
 
-        # 🔹 Run LangGraph pipeline
+        # Run LangGraph pipeline
         result = run_graph(request.query)
 
       
@@ -53,6 +53,6 @@ async def chat(request: QueryRequest):
 @app.get("/")
 def home():
     return {
-        "message": "AI Agent Running 🚀",
+        "message": "AI Agent Running ",
         "status": "success"
     }

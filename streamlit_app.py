@@ -34,7 +34,7 @@ if st.button("Run RAG"):
 
                 response_text = result.get("response", "No response generated")
 
-                st.subheader("🧠 Final Answer")
+                st.subheader("Final Answer")
                 st.write(response_text)
 
                 # Metrics

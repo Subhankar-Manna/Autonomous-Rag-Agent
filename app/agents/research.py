@@ -5,7 +5,7 @@ from pypdf import PdfReader
 from app.graph.state import AgentState
 
 
-# ✅ FIXED PATH
+#FIXED PATH
 BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = BASE_DIR / "data"
 
