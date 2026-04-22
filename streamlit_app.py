@@ -3,7 +3,6 @@ import json
 from pathlib import Path
 import time
 
-
 from app.main import run_rag_pipeline   
 
 LOG_FILE = Path("logs.json")
@@ -32,7 +31,11 @@ if st.button("Run RAG"):
 
                 st.success("Done!")
 
-                response_text = result.get("response", "No response generated")
+                # ✅ FIXED HERE (important)
+                if isinstance(result, dict):
+                    response_text = result.get("response", "No response generated")
+                else:
+                    response_text = result
 
                 st.subheader("Final Answer")
                 st.write(response_text)
@@ -67,8 +70,11 @@ if st.button("Run RAG"):
                 }
 
                 if LOG_FILE.exists():
-                    with open(LOG_FILE, "r") as f:
-                        data = json.load(f)
+                    try:
+                        with open(LOG_FILE, "r") as f:
+                            data = json.load(f)
+                    except:
+                        data = []
                 else:
                     data = []
 
