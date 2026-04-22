@@ -14,16 +14,16 @@ def build_graph():
     reviewer = ReviewerAgent()
     verifier = VerifierAgent()
 
-    # Add nodes 
+    # Add nodes
     graph.add_node("planner", planner_agent)
     graph.add_node("research", research_agent)
     graph.add_node("executor", executor_agent)
     graph.add_node("reviewer", reviewer.run)
     graph.add_node("verifier", verifier.run)
- 
+
     graph.set_entry_point("planner")
 
-    # Flow 
+    # Flow
     graph.add_edge("planner", "research")
     graph.add_edge("research", "executor")
     graph.add_edge("executor", "reviewer")
@@ -33,20 +33,9 @@ def build_graph():
     return graph.compile()
 
 
-def run_graph(user_query: str):
+def run_graph(state: AgentState):
     graph = build_graph()
 
-    state = {
-        "user_query": user_query
-    }
+    final_state = graph.invoke(state)
 
-    result = graph.invoke(state)
-
-    final = result.get("result", "No response generated")
-
-    final = final.replace("\n", " ").strip()
-
-    return final
-
-
-
+    return final_state   
