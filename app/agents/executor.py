@@ -36,7 +36,7 @@ else:
 
 
 def executor_agent(state: AgentState) -> AgentState:
-    print("🚀 EXECUTOR - FAST RAG MODE")
+    print("EXECUTOR - FAST RAG MODE")
 
     try:
         query = state.user_query
