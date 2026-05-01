@@ -21,6 +21,7 @@ def build_graph():
     graph.add_node("reviewer", reviewer.run)
     graph.add_node("verifier", verifier.run)
 
+    # Entry point
     graph.set_entry_point("planner")
 
     # Flow
@@ -33,9 +34,18 @@ def build_graph():
     return graph.compile()
 
 
-def run_graph(state: AgentState):
+def run_graph(state: AgentState) -> AgentState:
     graph = build_graph()
 
-    final_state = graph.invoke(state)
+    try:
+        final_state = graph.invoke(state)
 
-    return final_state   
+        if not isinstance(final_state, AgentState):
+            final_state = AgentState(**final_state)
+
+        return final_state
+
+    except Exception as e:
+        
+        state.result = f"Graph execution failed: {str(e)}"
+        return state
