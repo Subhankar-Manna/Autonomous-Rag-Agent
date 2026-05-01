@@ -1,5 +1,5 @@
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.embeddings import FakeEmbeddings   # ✅ CHANGED
 from langchain_groq import ChatGroq
 import os
 from pathlib import Path
@@ -17,7 +17,9 @@ llm = ChatGroq(
     temperature=0.3
 )
 
-embeddings = None
+# ✅ CHANGED: lightweight embeddings (no download, no freeze)
+embeddings = FakeEmbeddings(size=384)
+
 vectorstore = None
 retriever = None
 
@@ -28,14 +30,10 @@ else:
 
 
 def load_retriever():
-    global embeddings, vectorstore, retriever
+    global vectorstore, retriever
 
     if retriever is None:
-        print("LOADING EMBEDDINGS + FAISS...")
-
-        embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
+        print("LOADING FAISS...")
 
         vectorstore = FAISS.load_local(
             str(VECTOR_DB_PATH),
@@ -57,7 +55,6 @@ def executor_agent(state: AgentState) -> AgentState:
         query = state.user_query
         print("Query:", query)
 
-       
         docs = []
         if VECTOR_DB_PATH.exists():
             retriever_instance = load_retriever()
@@ -66,7 +63,6 @@ def executor_agent(state: AgentState) -> AgentState:
         else:
             print("No vector DB found")
 
-        
         context = "\n\n".join([doc.page_content[:200] for doc in docs])
 
         prompt = f"""
@@ -81,7 +77,6 @@ Context:
 
         print("Calling LLM...")
 
-      
         response = llm.invoke(prompt[:1500])
 
         print("LLM DONE")
