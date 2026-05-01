@@ -38,14 +38,15 @@ def run_graph(state: AgentState) -> AgentState:
     graph = build_graph()
 
     try:
+    
         final_state = graph.invoke(state)
 
+     
         if not isinstance(final_state, AgentState):
             final_state = AgentState(**final_state)
 
         return final_state
 
     except Exception as e:
-        
         state.result = f"Graph execution failed: {str(e)}"
         return state
