@@ -10,48 +10,67 @@ from app.graph.state import AgentState
 BASE_DIR = Path(__file__).resolve().parents[2]
 VECTOR_DB_PATH = BASE_DIR / "rag_db"
 
-# LLM
+# LLM (fast model)
 llm = ChatGroq(
     model="llama-3.1-8b-instant",
-    api_key=os.getenv("GROQ_API_KEY")
+    api_key=os.getenv("GROQ_API_KEY"),
+    temperature=0.3
 )
 
-# Load embeddings
-embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+embeddings = None
+vectorstore = None
+retriever = None
 
 if VECTOR_DB_PATH.exists():
-    print("FAISS LOADING...")
-    vectorstore = FAISS.load_local(
-        str(VECTOR_DB_PATH),
-        embeddings,
-        allow_dangerous_deserialization=True
-    )
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-    print("FAISS READY")
+    print("FAISS FOUND (will load on first query)")
 else:
     print("FAISS NOT FOUND")
-    retriever = None
+
+
+def load_retriever():
+    global embeddings, vectorstore, retriever
+
+    if retriever is None:
+        print("LOADING EMBEDDINGS + FAISS...")
+
+        embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2"
+        )
+
+        vectorstore = FAISS.load_local(
+            str(VECTOR_DB_PATH),
+            embeddings,
+            allow_dangerous_deserialization=True
+        )
+
+        retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
+
+        print("FAISS READY")
+
+    return retriever
 
 
 def executor_agent(state: AgentState) -> AgentState:
-    print("EXECUTOR - FAST RAG MODE")
+    print("EXECUTOR STARTED")
 
     try:
         query = state.user_query
+        print("Query:", query)
 
-        print("STEP 1: Got query")
-        if retriever:
-            docs = retriever.invoke(query)
-            print("STEP 2: Retrieved docs")
+       
+        docs = []
+        if VECTOR_DB_PATH.exists():
+            retriever_instance = load_retriever()
+            docs = retriever_instance.invoke(query)
+            print(f"Retrieved {len(docs)} docs")
         else:
-            docs = []
-            print("STEP 2: No retriever")
-        context = "\n\n".join([doc.page_content[:300] for doc in docs])
-        print("STEP 3: Context ready")
+            print("No vector DB found")
+
+        
+        context = "\n\n".join([doc.page_content[:200] for doc in docs])
+
         prompt = f"""
-Answer based on context:
+Answer clearly and concisely.
 
 Question:
 {query}
@@ -59,13 +78,18 @@ Question:
 Context:
 {context}
 """
-        print("STEP 4: Calling LLM...")
-        response = llm.invoke(prompt[:2000])
-        print("STEP 5: LLM responded")
-        state.result = response.content
-        print("STEP 6: Returning result")
+
+        print("Calling LLM...")
+
+      
+        response = llm.invoke(prompt[:1500])
+
+        print("LLM DONE")
+
+        state.result = response.content.strip()
 
     except Exception as e:
+        print("ERROR:", str(e))
         state.result = f"Error: {str(e)}"
 
     return state
