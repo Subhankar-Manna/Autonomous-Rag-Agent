@@ -17,7 +17,6 @@ llm = ChatGroq(
     temperature=0.3
 )
 
-# ✅ CHANGED: lightweight embeddings (no download, no freeze)
 embeddings = FakeEmbeddings(size=384)
 
 vectorstore = None
